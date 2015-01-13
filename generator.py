@@ -10,3 +10,32 @@ class Generator(object):
     file_name='schema.sql'):
         self.connection = connection
         self.file_name = file_name
+
+    def insert(self):
+        conn = psycopg2.connect(self.connection)
+        cur = conn.cursor()
+        insert_storage = ''
+
+        file = open(self.file_name)
+        while 1:
+            char = file.read(1)
+            if not char: 
+                break
+            if char == '\"':
+                insert_storage += "\""
+            else:
+                insert_storage += char
+        file.close()
+
+        try:
+            cur.execute(insert_storage)
+        except Exception, err:
+            print err
+        print "---===---"
+        conn.commit()
+        cur.close()
+        conn.close()
+
+if __name__ == "__main__":
+    generator = Generator()
+    generator.insert()
