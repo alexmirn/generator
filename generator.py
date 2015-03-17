@@ -1,73 +1,78 @@
 # #!/usr/bin/python
 # # -*- coding: utf-8 -*-
+
 import yaml
+from queries import PostgreSQL
 
 class Generator(object):
-	__create_table = "CREATE TABLE \"{table}\" (\n\
-	{table}_id serial,\n" + '{fields}' + \
-			',\n    PRIMARY KEY ({table}_id)' + '\n);\n'
-	__time_table = 'ALTER TABLE {table} ADD COLUMN {table}_{function} timestamp;\n\
-ALTER TABLE {table} ALTER COLUMN {table}_{function} SET NOT NULL;\n\
-ALTER TABLE {table} ALTER COLUMN {table}_{function} SET DEFAULT now();\n'
-	__trigger = 'CREATE OR REPLACE FUNCTION {table}_timestamp_update()\n\
-RETURNS TRIGGER AS $$\n\
-BEGIN\n\
-	NEW.{table}_updated = now();\n\
-	RETURN NEW;\n\
-END;\n\
-$$ language \'plpgsql\';\n\
-CREATE TRIGGER \"tr_{table}_updated\" BEFORE UPDATE ON \"{table}\" \
-FOR EACH ROW EXECUTE PROCEDURE {table}_timestamp_update();\n'
 
-	def __init__(self, file_name):
-		self.file_name = file_name
-		self.load = self.load()
+    def __init__(self, file_name, sql_type):
+        self.file_name = file_name
+        self.load = self.load()
+        self.create_table = sql_type.create_table
+        self.time_table = sql_type.time_table
+        self.trigger = sql_type.trigger
 
-	def load(self):
-		with open(self.file_name) as schema:
-			stream = schema.read()
-    		return yaml.load(stream)
+    def load(self):
+        with open(self.file_name) as schema:
+            stream = schema.read()
+            return yaml.load(stream)
 
-	def save(self, file_name, statements):
-   	    with open(file_name, 'wb') as file_:
-    		file_.write(statements)
+    def save(self, file_name, statements):
+        with open(file_name, 'wb') as _file:
+            _file.write(statements)
 
-	def fields(self):
-		tables = list()
+    def fields(self):
+        tables = set()
 
-		for elem in self.load:
-			table_name = elem
-			table_name_low = elem.lower()
-			fields_list = list()
+        for elem in self.load:
+            table_name = elem
+            table_name_low = elem.lower()
+            fields_list = list()
 
-			for key, value in self.load[table_name]['fields'].iteritems():
-				fields_elements = '{}_{} {} NOT NULL'.format(table_name_low, key, value)
-				fields_list.append(fields_elements)
-				fields_join = '    ' + ',\n    '.join(fields_list)
-				new_table = self.__create_table.format(table = table_name_low, fields = fields_join)
-			tables.append(new_table)
+            for field_name, field_type in self.load[table_name]['fields'].iteritems():
+                fields_elements = '{}_{} {} NOT NULL'.format(table_name_low, field_name, field_type)
+                fields_list.append(fields_elements)
+                fields_join = ',\n    '.join(fields_list)
+                new_table = self.create_table.format(table = table_name_low, fields = fields_join)
+            tables.add('{}\n'.format(new_table))
 
-		return '\n'.join(tables) + '\n'
+        tables = sorted(tables)
+        return '\n'.join(tables)
 
-	def timestamps(self):
-		timestamp_and_trigger = list()
+    def alter_table(self):
+        alter_tables = set()
 
-		for elem in self.load:
-			table_name = elem
-			table_name_low = elem.lower()
+        for elem in self.load:
+            table_name_low = elem.lower()
 
-			timestamp_created = self.__time_table.format(table = table_name_low, function = 'created')
-			timestamp_updated = self.__time_table.format(table = table_name_low, function = 'updated')
+            timestamp_created = self.time_table.format(table = table_name_low, function = 'created')
+            timestamp_updated = self.time_table.format(table = table_name_low, function = 'updated')
 
-			trigger = self.__trigger.format(table = table_name_low)
-			timestamp_and_trigger.append(timestamp_created+'\n'+timestamp_updated+'\n'+trigger)
+            alter_tables.add('{}\n\n{}\n'.format(timestamp_created, timestamp_updated))
 
-		return '\n'.join(timestamp_and_trigger)
+        alter_tables = sorted(alter_tables)
+        print alter_tables
+        return '\n'.join(alter_tables)
+
+    def triggers(self):
+        trigger_set = set()
+
+        for elem in self.load:
+            table_name = elem
+            table_name_low = elem.lower()
+
+            trigger_elem = self.trigger.format(table = table_name_low)
+            trigger_set.add('{}\n'.format(trigger_elem))
+        
+        trigger_set = sorted(trigger_set)
+        return '\n'.join(trigger_set)
 
 if __name__ == "__main__":
-    generator = Generator('file.yml')
+    # sql_type = PostgreSQL()
+    generator = Generator('file.yml', PostgreSQL())
 
     fields = generator.fields()
-    timestamps = generator.timestamps()
-    generator.save('schema.sql', fields+timestamps)
- 
+    alter_table = generator.alter_table()
+    trigger1 = generator.triggers()
+    generator.save('schema.sql', '{}\n{}\n{}'.format(fields, alter_table, trigger1))
