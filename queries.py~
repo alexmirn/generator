@@ -1,0 +1,51 @@
+class PostgreSQL(object):
+	def __init__(self):
+		self.command = {
+			'create_table' : '''CREATE TABLE {table} (
+	{table}_id serial,
+	{fields},
+	PRIMARY KEY ({table}_id)
+);''',
+
+			'time_table' : '''ALTER TABLE {table} ADD COLUMN {table}_{function} timestamp;
+ALTER TABLE {table} ALTER COLUMN {table}_{function} SET NOT NULL;
+ALTER TABLE {table} ALTER COLUMN {table}_{function} SET DEFAULT now();''',
+
+			'trigger' : '''CREATE OR REPLACE FUNCTION {table}_timestamp_update()
+RETURNS TRIGGER AS $$
+BEGIN
+	NEW.{table}_updated = now();
+	RETURN NEW;
+END;
+$$ language 'plpgsql';
+CREATE TRIGGER "tr_{table}_updated" BEFORE UPDATE ON "{table}" 
+FOR EACH ROW EXECUTE PROCEDURE {table}_timestamp_update();''',
+
+			'foreign_key' : '''ALTER TABLE "{table}" ADD "{subtable}_id" INTEGER NOT NULL,
+    ADD CONSTRAINT "fk_{table}_{subtable}_id" FOREIGN KEY ("{subtable}_id") REFERENCES "{subtable}" ("{subtable}_id");
+''',
+
+			'create_table_many_many': '''CREATE TABLE {table}__{subtable} (
+    {table}_id INTEGER NOT NULL,
+    {subtable}_id INTEGER NOT NULL,
+    PRIMARY KEY ({table}_id, {subtable}_id)
+);''',
+			'foreign_key_many_many' : '''ALTER TABLE {table}__{subtable}
+    ADD CONSTRAINT fk_{table}__{subtable}_{table}_id FOREIGN KEY ({table}_id) REFERENCES {table} ({table}_id);
+
+ALTER TABLE {table}__{subtable}
+    ADD CONSTRAINT fk_{table}__{subtable}_{subtable}_id FOREIGN KEY ({subtable}_id) REFERENCES {subtable} ({subtable}_id);'''
+		}
+
+		
+
+# 			'create_table_many_many': '''CREATE TABLE "post__tag" (
+#     "post_id" INTEGER NOT NULL,
+#     "tag_id" INTEGER NOT NULL,
+#     PRIMARY KEY ("post_id", "tag_id")
+# );''',
+# 			'foreign_key_many_many' : '''ALTER TABLE "post__tag"
+#     ADD CONSTRAINT "fk_post__tag_post_id" FOREIGN KEY ("post_id") REFERENCES "post" ("post_id");
+
+# ALTER TABLE "post__tag"
+#     ADD CONSTRAINT "fk_post__tag_tag_id" FOREIGN KEY ("tag_id") REFERENCES "tag" ("tag_id");'''
